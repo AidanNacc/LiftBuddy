@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { Dumbbell, Calendar, Utensils, Plus, Trash2, TrendingUp, Award, Flame, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
 
@@ -65,18 +67,18 @@ export default function LiftBuddy() {
 
   const loadData = async () => {
     try {
-      const templatesResult = await window.storage.get('workout-templates');
-      const logsResult = await window.storage.get('workout-logs');
-      const dietResult = await window.storage.get('diet-entries');
+      const templatesResult = await localStorage.getItem('workout-templates');
+      const logsResult = await localStorage.getItem('workout-logs');
+      const dietResult = await localStorage.getItem('diet-entries');
 
-      if (templatesResult?.value) {
-        setWorkoutTemplates(JSON.parse(templatesResult.value));
+      if (templatesResult) {
+        setWorkoutTemplates(JSON.parse(templatesResult));
       }
-      if (logsResult?.value) {
-        setWorkoutLogs(JSON.parse(logsResult.value));
+      if (logsResult) {
+        setWorkoutLogs(JSON.parse(logsResult));
       }
-      if (dietResult?.value) {
-        setDietEntries(JSON.parse(dietResult.value));
+      if (dietResult) {
+        setDietEntries(JSON.parse(dietResult));
       }
     } catch (error) {
       console.log('No existing data found');
@@ -85,9 +87,9 @@ export default function LiftBuddy() {
 
   const saveData = async () => {
     try {
-      await window.storage.set('workout-templates', JSON.stringify(workoutTemplates));
-      await window.storage.set('workout-logs', JSON.stringify(workoutLogs));
-      await window.storage.set('diet-entries', JSON.stringify(dietEntries));
+      await localStorage.setItem('workout-templates', JSON.stringify(workoutTemplates));
+      await localStorage.setItem('workout-logs', JSON.stringify(workoutLogs));
+      await localStorage.setItem('diet-entries', JSON.stringify(dietEntries));
     } catch (error) {
       console.error('Error saving data:', error);
     }
