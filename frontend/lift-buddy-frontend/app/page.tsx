@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import GoalSetter from './components/GoalSetter';
+import CalendarView from './components/CalendarView';
 import { Dumbbell, Calendar, Utensils, Plus, Trash2, TrendingUp, Award, Flame, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
 
 interface Exercise {
@@ -43,14 +45,14 @@ const LiftBuddyLogo = () => (
       </div>
     </div>
     <div>
-      <h1 className="text-3xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">LiftBuddy</h1>
+      <h1 className="text-3xl font-white bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">LiftBuddy</h1>
       <p className="text-sm text-gray-500 font-medium">Your Fitness Companion</p>
     </div>
   </div>
 );
 
 export default function LiftBuddy() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'workouts' | 'diet' | 'calendar'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'workouts' | 'diet' | 'calendar' | 'goals'>('dashboard');
   const [workoutTemplates, setWorkoutTemplates] = useState<WorkoutTemplate[]>([]);
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [dietEntries, setDietEntries] = useState<DietEntry[]>([]);
@@ -60,6 +62,13 @@ export default function LiftBuddy() {
   const [selectedTemplate, setSelectedTemplate] = useState<WorkoutTemplate | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationMessage, setCelebrationMessage] = useState('');
+  const [roadmapEvents, setRoadmapEvents] = useState<any[]>([]);
+  const [showGoalSetter, setShowGoalSetter] = useState(false);
+  const [roadmapGoal, setRoadmapGoal] = useState<any | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showDietFormForDate, setShowDietFormForDate] = useState<string | null>(null);
+  const [dietForm, setDietForm] = useState({ meal: '', calories: '', protein: '', carbs: '', fats: '' });
+  const [workoutLogDate, setWorkoutLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     loadData();
@@ -80,6 +89,10 @@ export default function LiftBuddy() {
       if (dietResult) {
         setDietEntries(JSON.parse(dietResult));
       }
+      const roadmapResult = await localStorage.getItem('roadmap-events');
+      if (roadmapResult) setRoadmapEvents(JSON.parse(roadmapResult));
+      const goalResult = await localStorage.getItem('roadmap-goal');
+      if (goalResult) setRoadmapGoal(JSON.parse(goalResult));
     } catch (error) {
       console.log('No existing data found');
     }
@@ -90,6 +103,8 @@ export default function LiftBuddy() {
       await localStorage.setItem('workout-templates', JSON.stringify(workoutTemplates));
       await localStorage.setItem('workout-logs', JSON.stringify(workoutLogs));
       await localStorage.setItem('diet-entries', JSON.stringify(dietEntries));
+      await localStorage.setItem('roadmap-events', JSON.stringify(roadmapEvents));
+      await localStorage.setItem('roadmap-goal', JSON.stringify(roadmapGoal));
     } catch (error) {
       console.error('Error saving data:', error);
     }
@@ -98,6 +113,15 @@ export default function LiftBuddy() {
   useEffect(() => {
     saveData();
   }, [workoutTemplates, workoutLogs, dietEntries]);
+
+  useEffect(() => {
+    // persist roadmap events when changed
+    try { localStorage.setItem('roadmap-events', JSON.stringify(roadmapEvents)); } catch (e) {}
+  }, [roadmapEvents]);
+
+  useEffect(() => {
+    try { localStorage.setItem('roadmap-goal', JSON.stringify(roadmapGoal)); } catch (e) {}
+  }, [roadmapGoal]);
 
   const addWorkoutTemplate = (name: string) => {
     const newTemplate: WorkoutTemplate = {
@@ -142,16 +166,27 @@ export default function LiftBuddy() {
       exercises: template.exercises
     };
     setWorkoutLogs([...workoutLogs, log]);
+
+    // Also add to calendar events
+    setRoadmapEvents(events => [
+      ...events,
+      {
+        type: 'workout',
+        date,
+        title: template.name,
+        note: `${template.exercises.length} exercises`
+      }
+    ]);
     
     // Trigger celebration animation
     const messages = [
-      '💪 Beast Mode Activated!',
-      '🔥 Crushing It!',
-      '⚡ Unstoppable!',
-      '🏆 Workout Complete!',
-      '💯 Keep It Up!',
-      '🚀 You\'re On Fire!',
-      '⭐ Amazing Work!'
+      'Beast Mode Activated!',
+      'Crushing It!',
+      'Unstoppable!',
+      'Workout Complete!',
+      'Keep It Up!',
+      'You\'re On Fire!',
+      'Amazing Work!'
     ];
     setCelebrationMessage(messages[Math.floor(Math.random() * messages.length)]);
     setShowCelebration(true);
@@ -163,6 +198,17 @@ export default function LiftBuddy() {
 
   const addDietEntry = (entry: DietEntry) => {
     setDietEntries([...dietEntries, entry]);
+    // Also add to calendar events
+    setRoadmapEvents(events => [
+      ...events,
+      {
+        type: 'diet',
+        date: entry.date,
+        title: entry.meal,
+        caloriesTarget: entry.calories,
+        note: `P:${entry.protein} C:${entry.carbs} F:${entry.fats}`
+      }
+    ]);
     setShowNewDiet(false);
   };
 
@@ -229,10 +275,38 @@ export default function LiftBuddy() {
     const todayCalories = getTotalCaloriesToday();
     const recentWorkouts = workoutLogs.slice(-3).reverse();
 
+    const renderGoalCard = () => {
+      if (!roadmapGoal) return null;
+      const { startWeight, targetWeight, targetDate, activityLevel } = roadmapGoal;
+      const today = new Date();
+      const end = new Date(targetDate);
+      const daysLeft = Math.max(0, Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+      const totalToChange = Math.abs(targetWeight - startWeight) || 1;
+
+      return (
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-lg font-bold text-gray-800">Goal</h3>
+              <p className="text-sm text-gray-500">Target: <span className="font-semibold text-gray-800">{targetWeight} lbs</span> by <span className="font-semibold">{new Date(targetDate).toLocaleDateString()}</span></p>
+              <p className="text-sm text-gray-500 mt-2">Start: <span className="font-semibold text-gray-800">{startWeight} lbs</span> · Activity: <span className="font-semibold">{activityLevel}</span></p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-black text-gray-800">{daysLeft}</p>
+              <p className="text-sm text-gray-500">days left</p>
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <button onClick={() => setShowGoalSetter(true)} className="px-4 py-2 rounded-md bg-blue-600 text-white">Edit Goal</button>
+          </div>
+        </div>
+      );
+    };
+
     return (
       <div className="space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="group relative overflow-hidden bg-gradient-to-br from-orange-400 to-red-500 rounded-2xl p-6 text-white shadow-xl hover:shadow-2xl transition-all hover:scale-105">
             <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
             <Flame className="w-10 h-10 mb-3 opacity-90" strokeWidth={2} />
@@ -256,27 +330,33 @@ export default function LiftBuddy() {
         </div>
 
         {/* Quick Actions */}
+        {renderGoalCard()}
         <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-          <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-500" />
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="mb-2" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => setActiveTab('workouts')}
               title="Create and log workouts"
-              className="group relative bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-xl font-semibold hover:shadow-xl transition-all hover:scale-105 overflow-hidden"
+              className="group relative bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-4 rounded-xl font-extrabold hover:shadow-xl transition-all hover:scale-105 overflow-hidden w-full"
             >
-              <span className="relative z-10">Start Workout</span>
+              <span className="relative z-10 text-white font-extrabold">Start Workout</span>
               <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </button>
             <button
               onClick={() => setActiveTab('diet')}
               title="Add meal entry"
-              className="group relative bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-semibold hover:shadow-xl transition-all hover:scale-105 overflow-hidden"
+              className="group relative bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-xl font-extrabold hover:shadow-xl transition-all hover:scale-105 overflow-hidden w-full"
             >
-              <span className="relative z-10">Log Meal</span>
+              <span className="relative z-10 text-white font-extrabold">Log Meal</span>
               <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+            </button>
+            <button
+              onClick={() => setShowGoalSetter(true)}
+              title="Plan a goal and roadmap"
+              className="group relative bg-gradient-to-r from-purple-500 to-pink-500 text-white py-4 rounded-xl font-extrabold hover:shadow-xl transition-all hover:scale-105 overflow-hidden w-full"
+            >
+              <span className="relative z-10 text-white font-extrabold">Goal Setter</span>
+              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
             </button>
           </div>
         </div>
@@ -290,9 +370,9 @@ export default function LiftBuddy() {
           {recentWorkouts.length > 0 ? (
             <div className="space-y-3">
               {recentWorkouts.map((log, idx) => (
-                <div key={idx} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200">
+                <div key={idx} className="flex items-center justify-between p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
                       <Dumbbell className="w-6 h-6 text-white" />
                     </div>
                     <div>
@@ -324,6 +404,16 @@ export default function LiftBuddy() {
           <Dumbbell className="w-7 h-7 text-blue-500" />
           Workout Templates
         </h2>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600 font-medium">Log date:</label>
+            <input
+              type="date"
+              value={workoutLogDate}
+              onChange={(e) => setWorkoutLogDate(e.target.value)}
+              className="px-3 py-2 border-2 border-gray-200 rounded-xl text-black"
+            />
+          </div>
         <button
           onClick={() => setShowNewTemplate(true)}
           title="Create a new workout template"
@@ -333,6 +423,7 @@ export default function LiftBuddy() {
           <span className="relative z-10">New Template</span>
           <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-700 opacity-0 group-hover:opacity-100 transition-opacity"></div>
         </button>
+        </div>
       </div>
 
       {showNewTemplate && (
@@ -380,8 +471,8 @@ export default function LiftBuddy() {
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  const today = formatDate(new Date());
-                  logWorkout(today, template);
+                  const dateToLog = workoutLogDate || formatDate(new Date());
+                  logWorkout(dateToLog, template);
                 }}
                 title="Mark this workout as complete"
                 className="group relative bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-xl hover:shadow-xl transition-all hover:scale-105 font-semibold flex items-center gap-2 overflow-hidden"
@@ -461,7 +552,7 @@ export default function LiftBuddy() {
         </div>
 
         {/* Today's Summary */}
-        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-white shadow-xl">
+        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl p-6 text-black shadow-xl">
           <h3 className="text-lg font-bold mb-4 opacity-90">Today's Nutrition</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white bg-opacity-20 rounded-xl p-4 backdrop-blur">
@@ -524,6 +615,74 @@ export default function LiftBuddy() {
             <div className="text-center py-12">
               <Utensils className="w-16 h-16 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-400 font-medium">No meals logged yet</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderGoals = () => {
+    if (!roadmapGoal) {
+      return (
+        <div className="bg-white rounded-2xl p-8 shadow-lg border border-gray-100 text-center">
+          <h2 className="text-2xl font-bold mb-3">No Goals Yet</h2>
+          <p className="text-gray-600 mb-4">Create a goal to generate a workout and diet roadmap.</p>
+          <div className="flex justify-center">
+            <button onClick={() => setShowGoalSetter(true)} className="px-4 py-2 bg-blue-600 text-white rounded-md">Create Goal</button>
+          </div>
+        </div>
+      );
+    }
+
+    // show the saved goal and a summary of planned templates and diet
+    const { startWeight, targetWeight, targetDate, activityLevel } = roadmapGoal;
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-xl font-bold">Current Goal</h3>
+              <p className="text-sm text-gray-600">Start: <span className="font-semibold text-gray-800">{startWeight} lbs</span> → Target: <span className="font-semibold text-gray-800">{targetWeight} lbs</span> by {new Date(targetDate).toLocaleDateString()}</p>
+              <p className="text-sm text-gray-600 mt-2">Activity: <span className="font-semibold">{activityLevel}</span></p>
+            </div>
+            <div>
+              <button onClick={() => setShowGoalSetter(true)} className="px-4 py-2 bg-blue-600 text-white rounded-md">Edit Goal</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <h3 className="text-lg font-bold mb-3">Planned Workouts</h3>
+          {roadmapEvents.filter(e => e.type === 'workout').length === 0 ? (
+            <p className="text-gray-600">No planned workouts.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {roadmapEvents.filter(e => e.type === 'workout').slice(0, 12).map((e, i) => (
+                <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <p className="font-bold text-gray-800">{e.title}</p>
+                  <p className="text-sm text-gray-600">{e.note}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+          <h3 className="text-lg font-bold mb-3">Planned Diet (sample)</h3>
+          {dietEntries.length === 0 ? (
+            <p className="text-gray-600">No planned meals.</p>
+          ) : (
+            <div className="space-y-2">
+              {dietEntries.slice(0, 12).map(de => (
+                <div key={de.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-gray-800">{de.meal}</p>
+                    <p className="text-sm text-gray-600">{de.date} · {de.calories} kcal · P:{de.protein}g C:{de.carbs}g F:{de.fats}g</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -605,7 +764,7 @@ export default function LiftBuddy() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
+    <div className="min-h-screen bg-white">
       {/* Celebration Modal */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -640,30 +799,119 @@ export default function LiftBuddy() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto p-6">
-        <div className="mb-8">
-          <LiftBuddyLogo />
-        </div>
+      {showGoalSetter && (
+          <GoalSetter
+            onGenerate={(result, goal) => {
+              const events = result?.events || [];
+              const templates = result?.templates || [];
+              const dietPlans = result?.dietEntries || [];
+              setRoadmapEvents(events);
+              setRoadmapGoal(goal);
+              setWorkoutTemplates(prev => {
+                const existing = new Set(prev.map(t => t.id));
+                const incoming = templates.filter((t: any) => !existing.has(t.id));
+                return [...prev, ...incoming];
+              });
+              setDietEntries(prev => {
+                const existing = new Set(prev.map(d => d.id));
+                const incoming = dietPlans.filter((d: any) => !existing.has(d.id));
+                return [...prev, ...incoming];
+              });
+              setActiveTab('calendar');
+            }}
+            onClose={() => setShowGoalSetter(false)}
+          />
+      )}
 
-        <div className="flex gap-3 mb-8 overflow-x-auto pb-2">
+      {selectedDate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black opacity-30" onClick={() => setSelectedDate(null)} />
+          <div className="relative z-10 w-full max-w-2xl bg-white rounded-2xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">{new Date(selectedDate).toLocaleDateString()}</h3>
+              <button onClick={() => setSelectedDate(null)} className="text-gray-500">Close</button>
+            </div>
+            <div className="space-y-4">
+              {roadmapEvents.filter(ev => ev.date === selectedDate).length === 0 && (
+                <p className="text-gray-600">No planned events for this day.</p>
+              )}
+              {roadmapEvents.filter(ev => ev.date === selectedDate).map((ev, idx) => (
+                <div key={idx} className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-bold text-gray-800">{ev.title}</p>
+                      {ev.caloriesTarget && <p className="text-sm text-gray-600">Calories target: {ev.caloriesTarget}</p>}
+                      {ev.note && <p className="text-sm text-gray-600">{ev.note}</p>}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {ev.type === 'workout' && (
+                        <button onClick={() => {
+                          const log = { date: selectedDate, templateId: 'roadmap-' + Date.now().toString(), templateName: ev.title, exercises: [] };
+                          setWorkoutLogs(logs => [...logs, log]);
+                          setCelebrationMessage('🏆 Roadmap workout logged!');
+                          setShowCelebration(true);
+                          setTimeout(() => setShowCelebration(false), 2500);
+                        }} className="px-3 py-2 bg-blue-600 text-white rounded-md">Mark Done</button>
+                      )}
+                      {ev.type === 'diet' && (
+                        <button onClick={() => setShowDietFormForDate(selectedDate)} className="px-3 py-2 bg-green-600 text-white rounded-md">Add Meal</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {showDietFormForDate === selectedDate && (
+                <div className="bg-white p-4 rounded-xl border border-gray-200">
+                  <h4 className="font-bold mb-2">Add Meal for {new Date(selectedDate).toLocaleDateString()}</h4>
+                  <input className="w-full mb-2 p-2 border rounded" placeholder="Meal name" value={dietForm.meal} onChange={e => setDietForm(s => ({...s, meal: e.target.value}))} />
+                  <input className="w-full mb-2 p-2 border rounded" placeholder="Calories" value={dietForm.calories} onChange={e => setDietForm(s => ({...s, calories: e.target.value}))} />
+                  <div className="flex gap-2">
+                    <input className="flex-1 p-2 border rounded" placeholder="Protein (g)" value={dietForm.protein} onChange={e => setDietForm(s => ({...s, protein: e.target.value}))} />
+                    <input className="flex-1 p-2 border rounded" placeholder="Carbs (g)" value={dietForm.carbs} onChange={e => setDietForm(s => ({...s, carbs: e.target.value}))} />
+                    <input className="flex-1 p-2 border rounded" placeholder="Fats (g)" value={dietForm.fats} onChange={e => setDietForm(s => ({...s, fats: e.target.value}))} />
+                  </div>
+                  <div className="mt-3 flex gap-2 justify-end">
+                    <button onClick={() => setShowDietFormForDate(null)} className="px-3 py-2 border rounded">Cancel</button>
+                    <button onClick={() => {
+                      if (!dietForm.meal || !dietForm.calories) return;
+                      const entry = { id: Date.now().toString(), date: selectedDate, meal: dietForm.meal, calories: parseInt(dietForm.calories) || 0, protein: parseInt(dietForm.protein) || 0, carbs: parseInt(dietForm.carbs) || 0, fats: parseInt(dietForm.fats) || 0 };
+                      setDietEntries(entries => [...entries, entry]);
+                      setDietForm({ meal: '', calories: '', protein: '', carbs: '', fats: '' });
+                      setShowDietFormForDate(null);
+                    }} className="px-3 py-2 bg-green-600 text-white rounded-md">Save Meal</button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto">
+        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-6 mx-6">
+
+          <div className="mb-8 grid grid-cols-2 md:grid-cols-5 gap-4 items-center">
           {[
             { id: 'dashboard', icon: TrendingUp, label: 'Dashboard', gradient: 'from-purple-500 to-pink-500', tooltip: 'View your progress' },
             { id: 'workouts', icon: Dumbbell, label: 'Workouts', gradient: 'from-blue-500 to-indigo-600', tooltip: 'Manage workout templates' },
             { id: 'diet', icon: Utensils, label: 'Diet', gradient: 'from-green-500 to-emerald-600', tooltip: 'Track your nutrition' },
-            { id: 'calendar', icon: Calendar, label: 'Calendar', gradient: 'from-orange-500 to-red-500', tooltip: 'View workout history' }
+            { id: 'calendar', icon: Calendar, label: 'Calendar', gradient: 'from-orange-500 to-red-500', tooltip: 'View workout history' },
+            { id: 'goals', icon: Award, label: 'Goals', gradient: 'from-teal-500 to-cyan-600', tooltip: 'Manage goals and plans' }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               title={tab.tooltip}
-              className={`relative group flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap
+              className={`relative group flex items-center justify-center gap-2 w-full px-4 md:px-6 py-3 md:py-4 rounded-xl font-extrabold transition-all text-center
                 ${activeTab === tab.id
                   ? `bg-gradient-to-r ${tab.gradient} text-white shadow-lg scale-105`
-                  : 'bg-white text-gray-600 hover:bg-gray-50 shadow-sm hover:shadow-md hover:scale-105'
+                  : 'bg-white text-black hover:bg-gray-50 shadow-sm hover:shadow-md hover:scale-105'
                 }`}
             >
               <tab.icon className="w-5 h-5" />
-              {tab.label}
+              <span className="font-extrabold">{tab.label}</span>
               {/* Tooltip */}
               <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
                 {tab.tooltip}
@@ -675,7 +923,17 @@ export default function LiftBuddy() {
         {activeTab === 'dashboard' && renderDashboard()}
         {activeTab === 'workouts' && renderWorkouts()}
         {activeTab === 'diet' && renderDiet()}
-        {activeTab === 'calendar' && renderCalendar()}
+        {activeTab === 'calendar' && (
+            <CalendarView
+              events={[...roadmapEvents]}
+              currentDate={currentDate}
+              selectedDate={selectedDate}
+              onMonthChange={(d: Date) => setCurrentDate(d)}
+              onDayClick={(iso: string) => setSelectedDate(iso)}
+            />
+          )}
+        {activeTab === 'goals' && renderGoals()}
+        </div>
       </div>
     </div>
   );
@@ -684,23 +942,23 @@ export default function LiftBuddy() {
 function AddExerciseForm({ onAdd }: { onAdd: (exercise: Exercise) => void }) {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
-  const [sets, setSets] = useState('3');
-  const [reps, setReps] = useState('10');
-  const [weight, setWeight] = useState('0');
+  const [sets, setSets] = useState('');
+  const [reps, setReps] = useState('');
+  const [weight, setWeight] = useState('');
 
   const handleSubmit = () => {
     if (name) {
       onAdd({
         id: Date.now().toString(),
         name,
-        sets: parseInt(sets),
-        reps: parseInt(reps),
-        weight: parseFloat(weight)
+        sets: parseInt(sets) || 3,
+        reps: parseInt(reps) || 10,
+        weight: parseFloat(weight) || 0
       });
       setName('');
-      setSets('3');
-      setReps('10');
-      setWeight('0');
+      setSets('');
+      setReps('');
+      setWeight('');
       setShowForm(false);
     }
   };
@@ -730,37 +988,43 @@ function AddExerciseForm({ onAdd }: { onAdd: (exercise: Exercise) => void }) {
         placeholder="Exercise name (e.g., Bench Press)"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors font-medium"
+        className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors font-medium text-black"
       />
       <div className="grid grid-cols-3 gap-3">
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1 block">Sets</label>
           <input
             type="number"
-            placeholder="Sets"
+            placeholder="3"
             value={sets}
             onChange={(e) => setSets(e.target.value)}
-            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold"
+            min="1"
+            step="1"
+            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold text-black"
           />
         </div>
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1 block">Reps</label>
           <input
             type="number"
-            placeholder="Reps"
+            placeholder="10"
             value={reps}
             onChange={(e) => setReps(e.target.value)}
-            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold"
+            min="1"
+            step="1"
+            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold text-black"
           />
         </div>
         <div>
           <label className="text-xs font-bold text-gray-600 mb-1 block">Weight (lbs)</label>
           <input
             type="number"
-            placeholder="Weight"
+            placeholder="0"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
-            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold"
+            min="0"
+            step="0.5"
+            className="w-full px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors text-center font-bold text-black"
           />
         </div>
       </div>
@@ -782,18 +1046,24 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fats, setFats] = useState('');
+  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const handleSubmit = () => {
     if (meal && calories) {
       onAdd({
         id: Date.now().toString(),
-        date: new Date().toISOString().split('T')[0],
+        date,
         meal,
         calories: parseInt(calories),
         protein: parseInt(protein) || 0,
         carbs: parseInt(carbs) || 0,
         fats: parseInt(fats) || 0
       });
+
+      // Also add to calendar events
+      try {
+        // use parent setter via closure not available here; dispatch through localStorage pattern by lifting state? Instead rely on parent effect with dietEntries; parent calendar uses roadmapEvents only.
+      } catch {}
     }
   };
 
@@ -804,6 +1074,15 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
           <X className="w-5 h-5" />
         </button>
+      </div>
+      <div>
+        <label className="text-xs font-bold text-gray-600 mb-1 block">Date</label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:outline-none transition-colors font-medium text-black"
+        />
       </div>
       <input
         type="text"

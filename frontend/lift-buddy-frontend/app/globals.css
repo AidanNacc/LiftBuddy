@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #000000;
 }
 
 @theme inline {
@@ -14,13 +21,118 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* warmer, deep midnight blue instead of pure black */
+    --background: #000000;
+    --foreground: #000000;
   }
 }
 
 body {
-  background: var(--background);
+  background: transparent;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* Banner styles */
+.site-banner {
+  height: 14rem;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .site-banner { height: 16rem; }
+}
+@media (min-width: 1024px) {
+  .site-banner { height: 18rem; }
+}
+
+.banner-logo-title {
+  pointer-events: none;
+}
+.banner-logo-title > div {
+  pointer-events: auto;
+}
+
+.banner-frame {
+  margin: 0 auto;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(2,6,23,0.14);
+  border: 1px solid rgba(15,23,42,0.06);
+  background-color: #0f1724;
+}
+
+.site-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem; /* spacing around framed banner */
+}
+
+.site-banner h1 {
+  text-shadow: 0 4px 12px rgba(0,0,0,0.45);
+}
+
+/* Banner image overlay to ensure contrast and avoid pure-black look */
+.banner-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(3,7,18,0.12) 0%, rgba(3,7,18,0.28) 60%, rgba(3,7,18,0.42) 100%);
+  pointer-events: none;
+}
+
+/* Centered title card inside banner */
+.banner-logo-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.banner-title-card {
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  gap: 0.75rem;
+}
+
+.banner-title-card h1 {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.banner-title-card p {
+  margin-top: 0.125rem;
+}
+
+/* Navigation and hero styles */
+.nav-link {
+  font-weight: 600;
+  opacity: 0.9;
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+.nav-link:hover { opacity: 1; transform: translateY(-1px); }
+
+
+
+@media (min-width: 768px) {
+  .site-banner { height: 22rem; }
+}
+
+/* Make typed text in inputs/selects/textareas darker and caret visible */
+input, textarea, select {
+  color: #000000 !important;
+  caret-color: #000000;
+}
+
+input::placeholder, textarea::placeholder {
+  color: rgba(23,23,23,0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  input::placeholder, textarea::placeholder {
+    color: rgba(8, 1, 1, 0.45);
+  }
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Image from 'next/image';
 import "./globals.css";
 
 const geistSans = Geist({
@@ -25,9 +26,42 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900`}
       >
-        {children}
+        {/* Framed banner: centered, rounded rectangle with image inside */}
+        <header className="site-banner">
+          <div className="banner-frame relative w-full mx-auto max-w-7xl h-56 md:h-64 lg:h-72">
+            <Image src="/banner.jpg" alt="Banner" fill style={{ objectFit: 'cover', objectPosition: 'center' }} priority sizes="(min-width:1024px) 1100px, 100vw" />
+            <div className="banner-overlay" aria-hidden="true" />
+            {/* Centered logo/title inside the framed banner */}
+            <div className="banner-logo-title absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center z-20 pointer-events-none w-auto">
+              <div className="banner-title-card flex items-center gap-3 bg-white/92 dark:bg-black/[.06] rounded-lg px-5 py-3 shadow-lg backdrop-blur-sm border border-white/10 pointer-events-auto">
+                <div className="relative w-16 h-16 bg-gradient-to-br from-orange-500 via-red-600 to-pink-600 rounded-xl flex items-center justify-center transform -rotate-3 shadow-2xl border-2 border-yellow-400">
+                  {/* Custom stylized logo with dumbbell design */}
+                  <svg viewBox="0 0 64 64" className="w-10 h-10 text-white drop-shadow-lg" fill="currentColor">
+                    {/* Dumbbell bar */}
+                    <rect x="16" y="30" width="32" height="4" rx="2" />
+                    {/* Left weight plates */}
+                    <rect x="8" y="24" width="10" height="16" rx="2" />
+                    <rect x="4" y="26" width="6" height="12" rx="1.5" />
+                    {/* Right weight plates */}
+                    <rect x="46" y="24" width="10" height="16" rx="2" />
+                    <rect x="54" y="26" width="6" height="12" rx="1.5" />
+                    {/* Energy burst accent */}
+                    <circle cx="32" cy="32" r="3" className="fill-yellow-300" />
+                  </svg>
+                </div>
+                <div className="leading-tight">
+                  <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-gray-50 tracking-tight select-none">LiftBuddy</h1>
+                  <p className="text-xs md:text-sm text-gray-600 dark:text-gray-200 font-medium select-none">Your Fitness Companion</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div className="max-w-7xl mx-auto px-6 pt-4">
+          {children}
+        </div>
       </body>
     </html>
   );
