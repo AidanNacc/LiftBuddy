@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import GoalSetter from './components/GoalSetter';
 import CalendarView from './components/CalendarView';
 import { Dumbbell, Calendar, Utensils, Plus, Trash2, TrendingUp, Award, Flame, ChevronLeft, ChevronRight, X, Check } from 'lucide-react';
+import "./page.css";
 
 interface Exercise {
   id: string;
@@ -34,6 +35,8 @@ interface DietEntry {
   protein: number;
   carbs: number;
   fats: number;
+  suggested?: boolean;
+  image?: string; // optional data URL or public path
 }
 
 const LiftBuddyLogo = () => (
@@ -57,6 +60,7 @@ export default function LiftBuddy() {
   const [workoutLogs, setWorkoutLogs] = useState<WorkoutLog[]>([]);
   const [dietEntries, setDietEntries] = useState<DietEntry[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [showNewTemplate, setShowNewTemplate] = useState(false);
   const [showNewDiet, setShowNewDiet] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<WorkoutTemplate | null>(null);
@@ -194,6 +198,88 @@ export default function LiftBuddy() {
     setTimeout(() => {
       setShowCelebration(false);
     }, 3000);
+    // Generate diet suggestions for this workout
+    try {
+      generateDietForWorkout(log);
+    } catch (e) {
+      console.error('Failed to generate diet for workout', e);
+    }
+  };
+
+  // Create simple diet recommendations based on workout volume
+  const generateDietForWorkout = (log: WorkoutLog) => {
+    // Estimate workload: sum(sets * reps * weight)
+    const totalVolume = log.exercises.reduce((sum, ex) => sum + (ex.sets * ex.reps * (ex.weight || 0)), 0);
+
+    // Heuristic: calories burned ~ totalVolume * 0.12 (tunable)
+    const caloriesBurned = Math.round(totalVolume * 0.12);
+
+    // Base daily calories (simple default). You can later extend this to use user profile.
+    const baseCalories = 2000;
+
+    // Recommend extra calories to refuel + small surplus for recovery
+    const recommendedTotal = baseCalories + caloriesBurned + 200;
+
+    // Split into 3 meals
+    const breakfastCal = Math.round(recommendedTotal * 0.25);
+    const lunchCal = Math.round(recommendedTotal * 0.35);
+    const dinnerCal = recommendedTotal - breakfastCal - lunchCal;
+
+    const caloriesToMacros = (cals: number) => {
+      // Simple macro split: 30% protein, 45% carbs, 25% fats
+      const proteinCals = cals * 0.30;
+      const carbsCals = cals * 0.45;
+      const fatsCals = cals * 0.25;
+
+      return {
+        protein: Math.round(proteinCals / 4),
+        carbs: Math.round(carbsCals / 4),
+        fats: Math.round(fatsCals / 9),
+      };
+    };
+
+    const today = log.date;
+    const now = Date.now();
+    const suggestions: DietEntry[] = [
+      {
+        id: `${now}-b`,
+        date: today,
+        meal: `Breakfast (Post-workout suggestion)`,
+        calories: breakfastCal,
+        ...caloriesToMacros(breakfastCal),
+        suggested: true,
+      },
+      {
+        id: `${now}-l`,
+        date: today,
+        meal: `Lunch (Recovery)`,
+        calories: lunchCal,
+        ...caloriesToMacros(lunchCal),
+        suggested: true,
+      },
+      {
+        id: `${now}-d`,
+        date: today,
+        meal: `Dinner (Carb+Protein)`,
+        calories: dinnerCal,
+        ...caloriesToMacros(dinnerCal),
+        suggested: true,
+      }
+    ];
+
+    // Append suggestions to diet entries (avoid duplicating suggestions for same workout/date)
+    setDietEntries(prev => {
+      const existingSuggestedForDate = prev.filter(e => e.date === today && e.suggested);
+      if (existingSuggestedForDate.length > 0) {
+        // If suggestions already exist for this date, replace them
+        const nonSuggested = prev.filter(e => !(e.date === today && e.suggested));
+        return [...nonSuggested, ...suggestions];
+      }
+      return [...prev, ...suggestions];
+    });
+
+    // Switch user to diet tab to view suggestions
+    setActiveTab('diet');
   };
 
   const addDietEntry = (entry: DietEntry) => {
@@ -589,7 +675,17 @@ export default function LiftBuddy() {
                 <div key={entry.id} className="group p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 hover:border-green-300 transition-colors">
                   <div className="flex justify-between items-start mb-3">
                     <div>
-                      <p className="font-bold text-gray-800 text-lg">{entry.meal}</p>
+                          <div className="flex items-center gap-2">
+                            {entry.image && (
+                              <img src={entry.image} alt={entry.meal} className="w-12 h-10 object-cover rounded-lg mr-2" />
+                            )}
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-gray-800 text-lg">{entry.meal}</p>
+                              {entry.suggested && (
+                                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-semibold">Suggested</span>
+                              )}
+                            </div>
+                          </div>
                       <p className="text-sm text-gray-500">{new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -728,7 +824,7 @@ export default function LiftBuddy() {
             {Array.from({ length: startingDayOfWeek }).map((_, i) => (
               <div key={`empty-${i}`} className="aspect-square" />
             ))}
-            {Array.from({ length: daysInMonth }).map((_, i) => {
+              {Array.from({ length: daysInMonth }).map((_, i) => {
               const day = i + 1;
               const date = formatDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), day));
               const hasWorkout = isWorkoutDay(date);
@@ -738,6 +834,7 @@ export default function LiftBuddy() {
                 <div
                   key={day}
                   title={hasWorkout ? `Workout completed on ${date}` : isToday ? 'Today' : ''}
+                  onClick={() => setSelectedCalendarDate(date)}
                   className={`aspect-square flex items-center justify-center rounded-xl text-sm font-bold transition-all cursor-pointer
                     ${hasWorkout 
                       ? 'bg-gradient-to-br from-blue-500 to-purple-600 text-white shadow-lg scale-105 hover:scale-110 hover:shadow-xl' 
@@ -752,7 +849,40 @@ export default function LiftBuddy() {
             })}
           </div>
         </div>
-
+        
+        {/* Selected day details */}
+        <div className="mt-4">
+          {selectedCalendarDate ? (
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-bold text-gray-800">Workouts on {new Date(selectedCalendarDate).toLocaleDateString()}</h3>
+                <button onClick={() => setSelectedCalendarDate(null)} className="text-gray-500 hover:text-gray-700">Close</button>
+              </div>
+              {workoutLogs.filter(l => l.date === selectedCalendarDate).length > 0 ? (
+                <div className="space-y-3">
+                  {workoutLogs.filter(l => l.date === selectedCalendarDate).map((log, idx) => (
+                    <div key={idx} className="p-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl border border-gray-200 flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-gray-800">{log.templateName}</p>
+                        <p className="text-sm text-gray-500">{log.exercises.length} exercises</p>
+                      </div>
+                      <div className="text-sm text-gray-600">{new Date(log.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-gray-500">No workouts recorded on this day.</div>
+              )}
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border border-blue-100">
+              <div className="flex items-center gap-4">
+                <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"></div>
+                <p className="text-gray-700 font-medium">Click a day to view recorded workouts</p>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 border border-blue-100">
           <div className="flex items-center gap-4">
             <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"></div>
@@ -1047,6 +1177,8 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
   const [carbs, setCarbs] = useState('');
   const [fats, setFats] = useState('');
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>('');
 
   const handleSubmit = () => {
     if (meal && calories) {
@@ -1057,7 +1189,8 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
         calories: parseInt(calories),
         protein: parseInt(protein) || 0,
         carbs: parseInt(carbs) || 0,
-        fats: parseInt(fats) || 0
+        fats: parseInt(fats) || 0,
+        image: imagePreview || undefined
       });
 
       // Also add to calendar events
@@ -1065,6 +1198,18 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
         // use parent setter via closure not available here; dispatch through localStorage pattern by lifting state? Instead rely on parent effect with dietEntries; parent calendar uses roadmapEvents only.
       } catch {}
     }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      setImagePreview(result);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -1133,6 +1278,18 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
           />
         </div>
       </div>
+      <div>
+        <label className="text-xs font-bold text-gray-600 mb-1 block">Photo (optional)</label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          className="w-full"
+        />
+        {imagePreview && (
+          <img src={imagePreview} alt="preview" className="mt-3 w-32 h-24 object-cover rounded-lg border" />
+        )}
+      </div>
       <button
         onClick={handleSubmit}
         title="Add this meal"
@@ -1144,37 +1301,3 @@ function AddDietForm({ onAdd, onCancel }: { onAdd: (entry: DietEntry) => void; o
     </div>
   );
 }
-
-// Add CSS animations
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  
-  @keyframes bounce-in {
-    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-    50% { transform: scale(1.2) rotate(10deg); }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
-  }
-  
-  @keyframes confetti {
-    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-  }
-  
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
-  }
-  
-  .animate-bounce-in {
-    animation: bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-  
-  .animate-confetti {
-    animation: confetti linear forwards;
-    font-size: 2rem;
-  }
-`;
-document.head.appendChild(style);
